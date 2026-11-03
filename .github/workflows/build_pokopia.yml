@@ -8,12 +8,39 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15 # Apple Silicon M2 con minutos 100% gratuitos e ilimitados en repo público
+    runs-on: xcode-27 # Apple Silicon con macOS 27, Xcode 27 y Metal 4 nativo
     timeout-minutes: 180
 
     steps:
       - name: Checkout este repositorio
         uses: actions/checkout@v4
+
+      - name: Configurar Xcode 27 con iOS 27 SDK
+        run: |
+          if [ -d "/Applications/Xcode_27.2.app" ]; then
+            echo "Seleccionando Xcode 27.2"
+            sudo xcode-select -s /Applications/Xcode_27.2.app
+          elif [ -d "/Applications/Xcode_27.1.app" ]; then
+            echo "Seleccionando Xcode 27.1"
+            sudo xcode-select -s /Applications/Xcode_27.1.app
+          elif [ -d "/Applications/Xcode_27.2_Release_Candidate.app" ]; then
+            echo "Seleccionando Xcode 27.2 RC"
+            sudo xcode-select -s /Applications/Xcode_27.2_Release_Candidate.app
+          else
+            XCODE_APP=$(ls -d /Applications/Xcode*27*.app /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+            echo "Seleccionando: $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP"
+          fi
+          xcodebuild -version
+          xcrun -sdk iphoneos --show-sdk-version || true
+          sudo xcodebuild -downloadComponent MetalToolchain || true
+          xcrun -sdk iphoneos metal --version || true
+
+          # Fuente fallback si es necesario
+          if [ ! -f "/System/Library/Fonts/Supplemental/Arial Unicode.ttf" ]; then
+            FONT=$(find /System/Library/Fonts /Library/Fonts -name "*.ttf" 2>/dev/null | head -n 1)
+            echo "STD_FONT=$FONT" >> $GITHUB_ENV
+          fi
 
       - name: Instalar dependencias del sistema y Python
         run: |
@@ -27,7 +54,7 @@ jobs:
           cd "$HOME/pokopia-native"
           python3 nxs2.py setup
 
-          # Aplicar parche para aceptar el dump del Update 2.0.1a (v655360 / 76a489f3...)
+          # Aplicar parche para aceptar el dump del Update 2.0.1a y omitir dmhost al compilar solo IPA
           python3 "$GITHUB_WORKSPACE/patch_pokopia.py" "$HOME/pokopia-native"
 
       - name: Descargar dump NUP desde la Release privada
