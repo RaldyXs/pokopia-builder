@@ -102,6 +102,18 @@ jobs:
           restore-keys: |
             pokopia-shaders-
 
+      - name: Copiar env.txt para Dungeons (si existe)
+        if: always()
+        run: |
+          if [ -f "${{ github.workspace }}/env.txt" ]; then
+            echo "[INFO] Copiando env.txt al directorio de dump"
+            cp "${{ github.workspace }}/env.txt" "$HOME/dump/env.txt"
+          fi
+
+      - name: Establecer variable DM_ALIAS_SIZE (fallback)
+        run: |
+          echo "DM_ALIAS_SIZE=0x140000000" >> $GITHUB_ENV
+
       - name: Compilar IPA con pokopia-native incluyendo runtime shaders (FULL SPEED)
         run: |
           cd "$HOME/pokopia-native"
