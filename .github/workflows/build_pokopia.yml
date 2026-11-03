@@ -91,10 +91,10 @@ jobs:
           ls -lh "$HOME/dump/exefs"
           ls -lh "$HOME/dump/romfs"
 
-      - name: Compilar IPA con pokopia-native
+      - name: Compilar IPA con pokopia-native incluyendo runtime shaders
         run: |
           cd "$HOME/pokopia-native"
-          python3 nxs2.py build "$HOME/dump" --ipa
+          python3 nxs2.py build "$HOME/dump" --ipa --dumps "$GITHUB_WORKSPACE/shdump"
 
       - name: Inspeccionar archivos generados
         run: |
