@@ -27,26 +27,8 @@ jobs:
           cd "$HOME/pokopia-native"
           python3 nxs2.py setup
 
-          # Adaptar game.tsv y nxs2.py para aceptar el build ID del update 2.0.1a (v655360 / 76a489f3...)
-          python3 -c "
-          import os
-
-          tsv_path = os.path.expanduser('~/pokopia-native/profile/0400A3A01EE4C000/game.tsv')
-          lines = open(tsv_path, 'r', encoding='utf-8').read().splitlines()
-          new_lines = []
-          for l in lines:
-              new_lines.append(l)
-              if l.startswith('build\tv327680'):
-                  new_lines.append('build\tv655360\t?\tmain=76a489f3bd3642fa5e18bd83d32c98ba\tsubsdk0=9646a69cb1024ba919fddaa4265e6bc5\tsdk=cc7da00d672399efe7958790d17fae39')
-          open(tsv_path, 'w', encoding='utf-8').write('\n'.join(new_lines) + '\n')
-          print('[OK] game.tsv actualizado con soporte para Update 2.0.1a')
-
-          nxs2_path = os.path.expanduser('~/pokopia-native/nxs2.py')
-          s = open(nxs2_path, 'r', encoding='utf-8').read()
-          s = s.replace(\"bid == want['main']\", \"(bid == want['main'] or bid == '76a489f3bd3642fa5e18bd83d32c98ba')\")
-          open(nxs2_path, 'w', encoding='utf-8').write(s)
-          print('[OK] nxs2.py parcheado con soporte para Update 2.0.1a')
-          "
+          # Aplicar parche para aceptar el dump del Update 2.0.1a (v655360 / 76a489f3...)
+          python3 "$GITHUB_WORKSPACE/patch_pokopia.py" "$HOME/pokopia-native"
 
       - name: Descargar dump NUP desde la Release privada
         env:
@@ -78,16 +60,15 @@ jobs:
 
       - name: Inspeccionar archivos generados
         run: |
-          echo "Archivos generados en pokopia-native:"
-          find "$HOME/pokopia-native" -name "*.ipa" -ls
-          find "$HOME/dump" -name "RomFS.img" -ls 2>/dev/null || true
-          find "$HOME/pokopia-native" -name "RomFS.img" -ls 2>/dev/null || true
+          echo "Archivos generados en todo el sistema:"
+          find "$HOME" -name "*.ipa" -ls 2>/dev/null || true
+          find "$HOME" -name "RomFS.img" -ls 2>/dev/null || true
 
       - name: Diagnóstico de logs si falla
         if: always()
         run: |
           echo "=== LOGS DE COMPILACIÓN DETALLADOS ==="
-          for f in $(find "$HOME/pokopia-native" -name "*.log" 2>/dev/null); do
+          for f in $(find "$HOME/dump_native" "$HOME/pokopia-native" -name "*.log" 2>/dev/null); do
             echo "-------------------- $f --------------------"
             cat "$f"
           done
@@ -97,11 +78,12 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           echo "[*] Subiendo IPA a la Release privada 'pokemon-pokopia'..."
-          for ipa in $(find "$HOME/pokopia-native" -name "*.ipa" 2>/dev/null); do
+          for ipa in $(find "$HOME" -name "*.ipa" 2>/dev/null); do
             echo "[*] Subiendo $ipa..."
             gh release upload pokemon-pokopia "$ipa" --clobber --repo RaldyXs/nxnative-builder
           done
 
+          echo "[*] Buscando RomFS.img..."
           for rom in $(find "$HOME" -name "RomFS.img" 2>/dev/null); do
             echo "[*] Encontrado RomFS: $rom"
             size=$(stat -f%z "$rom" 2>/dev/null || stat -c%s "$rom" 2>/dev/null)
