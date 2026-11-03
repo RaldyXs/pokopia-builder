@@ -1,0 +1,117 @@
+name: Compilar IPA de Pokemon Pokopia (Gratis macOS)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15 # Apple Silicon M2 con minutos 100% gratuitos e ilimitados en repo público
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout este repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias del sistema y Python
+        run: |
+          brew install xcodegen zstd glslang spirv-cross
+          brew install --cask dotnet-sdk
+          python3 -m pip install lz4 "capstone>=5,<6" fonttools requests pillow "git+https://github.com/a55uka/nup.git#subdirectory=tools/nup" --break-system-packages
+
+      - name: Clonar y configurar pokopia-native oficial
+        run: |
+          git clone https://github.com/xFractals/pokopia-native.git "$HOME/pokopia-native"
+          cd "$HOME/pokopia-native"
+          python3 nxs2.py setup
+
+          # Adaptar game.tsv y nxs2.py para aceptar el build ID del update 2.0.1a (v655360 / 76a489f3...)
+          python3 -c "
+          import os
+
+          tsv_path = os.path.expanduser('~/pokopia-native/profile/0400A3A01EE4C000/game.tsv')
+          lines = open(tsv_path, 'r', encoding='utf-8').read().splitlines()
+          new_lines = []
+          for l in lines:
+              new_lines.append(l)
+              if l.startswith('build\tv327680'):
+                  new_lines.append('build\tv655360\t?\tmain=76a489f3bd3642fa5e18bd83d32c98ba\tsubsdk0=9646a69cb1024ba919fddaa4265e6bc5\tsdk=cc7da00d672399efe7958790d17fae39')
+          open(tsv_path, 'w', encoding='utf-8').write('\n'.join(new_lines) + '\n')
+          print('[OK] game.tsv actualizado con soporte para Update 2.0.1a')
+
+          nxs2_path = os.path.expanduser('~/pokopia-native/nxs2.py')
+          s = open(nxs2_path, 'r', encoding='utf-8').read()
+          s = s.replace(\"bid == want['main']\", \"(bid == want['main'] or bid == '76a489f3bd3642fa5e18bd83d32c98ba')\")
+          open(nxs2_path, 'w', encoding='utf-8').write(s)
+          print('[OK] nxs2.py parcheado con soporte para Update 2.0.1a')
+          "
+
+      - name: Descargar dump NUP desde la Release privada
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          mkdir -p "$HOME/GameFolder"
+          echo "[*] Descargando las 12 partes del NUP desde RaldyXs/nxnative-builder..."
+          gh release download pokemon-pokopia --dir "$HOME/GameFolder" --repo RaldyXs/nxnative-builder
+
+          echo "[*] Uniendo partes del archivo NUP..."
+          cat "$HOME/GameFolder"/*.parta* > "$HOME/GameFolder/PokemonPokopia.nup"
+          rm -f "$HOME/GameFolder"/*.parta*
+          ls -lh "$HOME/GameFolder"
+
+      - name: Extraer dump NUP
+        run: |
+          mkdir -p "$HOME/dump"
+          echo "[*] Extrayendo paquete update del NUP..."
+          nup extract "$HOME/GameFolder/PokemonPokopia.nup" "$HOME/dump" --package update
+          echo "[*] Contenido extraido:"
+          ls -lh "$HOME/dump"
+          ls -lh "$HOME/dump/exefs"
+          ls -lh "$HOME/dump/romfs"
+
+      - name: Compilar IPA con pokopia-native
+        run: |
+          cd "$HOME/pokopia-native"
+          python3 nxs2.py build "$HOME/dump" --ipa
+
+      - name: Inspeccionar archivos generados
+        run: |
+          echo "Archivos generados en pokopia-native:"
+          find "$HOME/pokopia-native" -name "*.ipa" -ls
+          find "$HOME/dump" -name "RomFS.img" -ls 2>/dev/null || true
+          find "$HOME/pokopia-native" -name "RomFS.img" -ls 2>/dev/null || true
+
+      - name: Diagnóstico de logs si falla
+        if: always()
+        run: |
+          echo "=== LOGS DE COMPILACIÓN DETALLADOS ==="
+          for f in $(find "$HOME/pokopia-native" -name "*.log" 2>/dev/null); do
+            echo "-------------------- $f --------------------"
+            cat "$f"
+          done
+
+      - name: Subir IPA y RomFS a la Release privada
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          echo "[*] Subiendo IPA a la Release privada 'pokemon-pokopia'..."
+          for ipa in $(find "$HOME/pokopia-native" -name "*.ipa" 2>/dev/null); do
+            echo "[*] Subiendo $ipa..."
+            gh release upload pokemon-pokopia "$ipa" --clobber --repo RaldyXs/nxnative-builder
+          done
+
+          for rom in $(find "$HOME" -name "RomFS.img" 2>/dev/null); do
+            echo "[*] Encontrado RomFS: $rom"
+            size=$(stat -f%z "$rom" 2>/dev/null || stat -c%s "$rom" 2>/dev/null)
+            if [ "$size" -gt 2000000000 ]; then
+              split -b 1200M "$rom" "${rom}.part"
+              for p in "${rom}.part"*; do
+                gh release upload pokemon-pokopia "$p" --clobber --repo RaldyXs/nxnative-builder
+              done
+            else
+              gh release upload pokemon-pokopia "$rom" --clobber --repo RaldyXs/nxnative-builder
+            fi
+          done
+          echo "[OK] Todo subido a la Release privada exitosamente!"
