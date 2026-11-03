@@ -17,12 +17,13 @@ jobs:
 
       - name: Configurar Xcode 27 con iOS 27 SDK
         run: |
-          if [ -d "/Applications/Xcode_27.2.app" ]; then
-            echo "Seleccionando Xcode 27.2"
-            sudo xcode-select -s /Applications/Xcode_27.2.app
-          elif [ -d "/Applications/Xcode_27.1.app" ]; then
+          ls -ld /Applications/Xcode* || true
+          if [ -d "/Applications/Xcode_27.1.app" ]; then
             echo "Seleccionando Xcode 27.1"
             sudo xcode-select -s /Applications/Xcode_27.1.app
+          elif [ -d "/Applications/Xcode_27.2.app" ]; then
+            echo "Seleccionando Xcode 27.2"
+            sudo xcode-select -s /Applications/Xcode_27.2.app
           elif [ -d "/Applications/Xcode_27.2_Release_Candidate.app" ]; then
             echo "Seleccionando Xcode 27.2 RC"
             sudo xcode-select -s /Applications/Xcode_27.2_Release_Candidate.app
@@ -33,7 +34,16 @@ jobs:
           fi
           xcodebuild -version
           xcrun -sdk iphoneos --show-sdk-version || true
-          sudo xcodebuild -downloadComponent MetalToolchain || true
+
+          for i in 1 2 3; do
+            if xcrun -sdk iphoneos metal --version 2>/dev/null; then
+              echo "[OK] Metal compiler disponible!"
+              break
+            fi
+            echo "[*] Intento $i descargando MetalToolchain..."
+            sudo xcodebuild -downloadComponent MetalToolchain || true
+            sleep 3
+          done
           xcrun -sdk iphoneos metal --version || true
 
           # Fuente fallback si es necesario
@@ -51,11 +61,12 @@ jobs:
       - name: Clonar y configurar pokopia-native oficial
         run: |
           git clone https://github.com/xFractals/pokopia-native.git "$HOME/pokopia-native"
+          
+          # Aplicar parche ANTES de setup para adaptar versión 2.0.1a y omitir bloqueos
+          python3 "$GITHUB_WORKSPACE/patch_pokopia.py" "$HOME/pokopia-native"
+
           cd "$HOME/pokopia-native"
           python3 nxs2.py setup
-
-          # Aplicar parche para aceptar el dump del Update 2.0.1a y omitir dmhost al compilar solo IPA
-          python3 "$GITHUB_WORKSPACE/patch_pokopia.py" "$HOME/pokopia-native"
 
       - name: Descargar dump NUP desde la Release privada
         env:
