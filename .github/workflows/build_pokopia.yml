@@ -91,16 +91,26 @@ jobs:
           ls -lh "$HOME/dump/exefs"
           ls -lh "$HOME/dump/romfs"
 
-      - name: Compilar IPA con pokopia-native incluyendo runtime shaders
+      - name: Restaurar cache de shaders previos
+        uses: actions/cache@v4
+        with:
+          path: |
+            /Users/runner/dump_native/shader/cache
+            /Users/runner/dump_native/shader/ios
+            /Users/runner/dump_native/shader/maxwell
+          key: pokopia-shaders-${{ hashFiles('shdump/**') }}
+          restore-keys: |
+            pokopia-shaders-
+
+      - name: Compilar IPA con pokopia-native incluyendo runtime shaders (FULL SPEED)
         run: |
           cd "$HOME/pokopia-native"
-          python3 nxs2.py build "$HOME/dump" --ipa --dumps "$GITHUB_WORKSPACE/shdump"
+          python3 nxs2.py build "$HOME/dump" --ipa --full-speed --dumps "$GITHUB_WORKSPACE/shdump"
 
       - name: Inspeccionar archivos generados
         run: |
           echo "Archivos generados en todo el sistema:"
           find "$HOME" -name "*.ipa" -ls 2>/dev/null || true
-          find "$HOME" -name "RomFS.img" -ls 2>/dev/null || true
 
       - name: Diagnóstico de logs si falla
         if: always()
@@ -111,27 +121,13 @@ jobs:
             cat "$f"
           done
 
-      - name: Subir IPA y RomFS a la Release privada
+      - name: Subir nuevo IPA a la Release privada
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
-          echo "[*] Subiendo IPA a la Release privada 'pokemon-pokopia'..."
+          echo "[*] Subiendo IPA optimizado a la Release privada 'pokemon-pokopia'..."
           for ipa in $(find "$HOME" -name "*.ipa" 2>/dev/null); do
             echo "[*] Subiendo $ipa..."
             gh release upload pokemon-pokopia "$ipa" --clobber --repo RaldyXs/nxnative-builder
           done
-
-          echo "[*] Buscando RomFS.img..."
-          for rom in $(find "$HOME" -name "RomFS.img" 2>/dev/null); do
-            echo "[*] Encontrado RomFS: $rom"
-            size=$(stat -f%z "$rom" 2>/dev/null || stat -c%s "$rom" 2>/dev/null)
-            if [ "$size" -gt 2000000000 ]; then
-              split -b 1200M "$rom" "${rom}.part"
-              for p in "${rom}.part"*; do
-                gh release upload pokemon-pokopia "$p" --clobber --repo RaldyXs/nxnative-builder
-              done
-            else
-              gh release upload pokemon-pokopia "$rom" --clobber --repo RaldyXs/nxnative-builder
-            fi
-          done
-          echo "[OK] Todo subido a la Release privada exitosamente!"
+          echo "[OK] IPA subido a la Release privada exitosamente!"

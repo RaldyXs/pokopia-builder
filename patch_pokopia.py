@@ -31,6 +31,10 @@ def patch(repo_dir):
     content = content.replace("bad = doctor(need_ios=need_ios, quiet=True)\n    if bad: doctor(need_ios=need_ios); raise Fail", "bad = []\n    if False: raise Fail")
     print('[OK] doctor() blocking checks bypassed')
 
+    # 2d. Force DMSH_TARGETS=ios to skip compiling 3,900 duplicate shaders for macOS (compiles iOS only!)
+    content = content.replace("if WIN: env['DMSH_TARGETS'] = 'ios'", "env['DMSH_TARGETS'] = 'ios'")
+    print('[OK] DMSH_TARGETS forced to iOS only')
+
     open(nxs2_path, 'w', encoding='utf-8').write(content)
     py_compile.compile(nxs2_path, doraise=True)
     print('[OK] nxs2.py validated and compiled cleanly')
