@@ -74,11 +74,11 @@ jobs:
         run: |
           mkdir -p "$HOME/GameFolder"
           echo "[*] Descargando las 12 partes del NUP desde RaldyXs/nxnative-builder..."
-          gh release download pokemon-pokopia --dir "$HOME/GameFolder" --repo RaldyXs/nxnative-builder
+          gh release download pokemon-pokopia --pattern "PokemonPokopia.nup.part*" --dir "$HOME/GameFolder" --repo RaldyXs/nxnative-builder
 
           echo "[*] Uniendo partes del archivo NUP..."
-          cat "$HOME/GameFolder"/*.parta* > "$HOME/GameFolder/PokemonPokopia.nup"
-          rm -f "$HOME/GameFolder"/*.parta*
+          cat "$HOME/GameFolder"/PokemonPokopia.nup.part* > "$HOME/GameFolder/PokemonPokopia.nup"
+          rm -f "$HOME/GameFolder"/PokemonPokopia.nup.part*
           ls -lh "$HOME/GameFolder"
 
       - name: Extraer dump NUP
